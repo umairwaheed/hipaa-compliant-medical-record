@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas
+from .. import crud, schemas, security
 from ..audit import AuditAction, record
 from ..database import get_db
 from ..deps import client_ip, get_current_user
@@ -30,7 +30,9 @@ def list_or_search_patients(
             action=AuditAction.SEARCH_PATIENTS,
             username=current.username,
             user_id=current.id,
-            detail=f"query={q!r} results={len(patients)}",
+            # Never store the raw term (it may be a patient name = PHI); a keyed
+            # fingerprint preserves correlation without disclosure.
+            detail=f"query_fp={security.blind_fingerprint(q)} results={len(patients)}",
             ip_address=client_ip(request),
         )
     else:

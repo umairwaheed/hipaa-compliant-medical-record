@@ -37,7 +37,9 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect username or password.")
 
     if user is None:
-        # Uniform response; still audit the attempt against the supplied name.
+        # Run a dummy bcrypt so this path costs the same as a wrong password —
+        # otherwise response timing reveals whether the username exists.
+        security.dummy_verify(payload.password)
         record(db, action=AuditAction.LOGIN_FAILURE, username=payload.username,
                ip_address=ip, detail="unknown user")
         db.commit()
@@ -50,7 +52,9 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
         raise HTTPException(status.HTTP_423_LOCKED,
                             "Account temporarily locked due to failed attempts. Try again later.")
 
-    if not user.is_active or not security.verify_password(payload.password, user.hashed_password):
+    # Always run bcrypt (even for inactive users) so timing does not distinguish.
+    password_ok = security.verify_password(payload.password, user.hashed_password)
+    if not user.is_active or not password_ok:
         locked = crud.register_failed_login(db, user)
         record(db, action=AuditAction.LOGIN_LOCKED if locked else AuditAction.LOGIN_FAILURE,
                username=user.username, user_id=user.id, ip_address=ip,

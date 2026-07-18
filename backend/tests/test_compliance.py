@@ -119,6 +119,24 @@ def test_full_and_preauth_tokens_have_distinct_scopes():
     assert security.decode_access_token(pre)["scp"] == security.SCOPE_PREAUTH
 
 
+def test_dummy_verify_runs_and_equalizes_path():
+    """The null-user login path must invoke bcrypt (via dummy_verify) so timing
+    doesn't reveal whether a username exists."""
+    # Should execute a real bcrypt comparison without raising and return None.
+    assert security.dummy_verify("anything") is None
+    # The dummy hash is a genuine bcrypt hash (starts with the bcrypt marker).
+    assert security._DUMMY_HASH.startswith("$2")
+
+
+def test_blind_fingerprint_hides_term_but_correlates():
+    """Audit fingerprints of search terms must not contain the term, must be
+    stable for equal (normalized) inputs, and differ for different inputs."""
+    fp = security.blind_fingerprint("Johnson")
+    assert "johnson" not in fp.lower() and "Johnson" not in fp
+    assert fp == security.blind_fingerprint("  johnson ")  # normalized-equal
+    assert fp != security.blind_fingerprint("Martinez")
+
+
 def test_encrypted_string_roundtrip_and_ciphertext():
     enc = EncryptedString()
     stored = enc.process_bind_param("123-45-6789", None)

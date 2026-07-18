@@ -16,7 +16,9 @@ export default function Login() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const expired = new URLSearchParams(location.search).get("expired");
+  const params = new URLSearchParams(location.search);
+  const expired = params.get("expired");
+  const idle = params.get("idle");
 
   async function submitPassword(e) {
     e.preventDefault();
@@ -66,6 +68,7 @@ export default function Login() {
         </p>
 
         {expired && <div className="banner warn">Your session expired. Please sign in again.</div>}
+        {idle && <div className="banner warn">Signed out due to inactivity. Please sign in again.</div>}
         {error && <div className="banner error">{error}</div>}
 
         {stage === "password" && (

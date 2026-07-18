@@ -11,6 +11,8 @@ There is no dev fallback for the encryption key: ``settings.fernet_key`` is
 sourced from a required secret, so the module cannot be imported without one.
 """
 import base64
+import hashlib
+import hmac
 import io
 import re
 import uuid
@@ -72,6 +74,26 @@ def verify_password(plain: str, hashed: str) -> bool:
         return bcrypt.checkpw(plain.encode()[:_MAX_PASSWORD_BYTES], hashed.encode())
     except ValueError:
         return False
+
+
+# Precomputed hash of a throwaway value. When a login is attempted for a
+# non-existent user we still run a bcrypt comparison against this hash so the
+# response time matches the wrong-password path — closing the username-
+# enumeration timing side channel (feeds §164.312(d)).
+_DUMMY_HASH = bcrypt.hashpw(b"timing-equalizer", bcrypt.gensalt()).decode()
+
+
+def dummy_verify(plain: str = "") -> None:
+    verify_password(plain or "x", _DUMMY_HASH)
+
+
+def blind_fingerprint(value: str) -> str:
+    """Keyed, non-reversible fingerprint of a (possibly PHI) value. Identical
+    inputs map to the same fingerprint (useful for audit correlation) but the
+    original cannot be recovered without the key — so PHI such as a searched
+    patient name never lands in the audit log in plaintext."""
+    normalized = value.strip().lower().encode()
+    return hmac.new(settings.secret_key.encode(), normalized, hashlib.sha256).hexdigest()[:16]
 
 
 # --------------------------------------------------------------------------- #
