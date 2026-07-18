@@ -88,6 +88,18 @@ def dummy_verify(plain: str = "") -> None:
     verify_password(plain or "x", _DUMMY_HASH)
 
 
+# Domain-separated key for the audit hash chain, derived from SECRET_KEY. Keying
+# the chain means an attacker with only DB write access cannot recompute row
+# hashes to hide tampering — they would also need this key (which lives in the
+# app host's config, not the database).
+_AUDIT_KEY = hmac.new(settings.secret_key.encode(), b"audit-chain-v1", hashlib.sha256).digest()
+
+
+def audit_mac(payload: str) -> str:
+    """Keyed MAC over an audit row's canonical payload (HMAC-SHA256)."""
+    return hmac.new(_AUDIT_KEY, payload.encode(), hashlib.sha256).hexdigest()
+
+
 def blind_fingerprint(value: str) -> str:
     """Keyed, non-reversible fingerprint of a (possibly PHI) value. Identical
     inputs map to the same fingerprint (useful for audit correlation) but the

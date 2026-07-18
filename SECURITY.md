@@ -15,7 +15,9 @@ issues.
 
 - **Authentication:** bcrypt password hashing + complexity policy; mandatory TOTP
   MFA (no PHI-capable token issued without a verified second factor); account
-  lockout after repeated failures.
+  lockout after repeated failures on **both** the password step **and** the MFA
+  verify/enroll step (shared counter), so the second factor is not
+  brute-forceable; nginx also rate-limits the credential + MFA endpoints.
 - **Login timing:** the non-existent-user path runs a dummy bcrypt comparison so
   response time does not reveal whether a username exists (`security.dummy_verify`).
 - **Sessions:** short-lived JWTs (15 min absolute) **plus** a 10-minute
@@ -35,9 +37,11 @@ issues.
   plaintext PHI key exists on the app host** — a stolen app-host disk/backup no
   longer decrypts PHI. Vault runs with TLS, mlock, an audit device, and 8200
   firewalled to the app host only. See `KEY-MANAGEMENT.md`.
-- **Audit:** append-only, SHA-256 hash-chained trail; tampering is detectable
-  via `/api/audit/verify`. Searched terms are stored as a **keyed fingerprint**,
-  never plaintext, so patient names do not leak into the audit log.
+- **Audit:** append-only, **keyed (HMAC-SHA256) hash-chained** trail; tampering
+  is detectable via `/api/audit/verify`. The chain key lives in app config, not
+  the DB, so an attacker with only database write access cannot recompute the
+  chain to conceal tampering. Searched terms are stored as a **keyed
+  fingerprint**, never plaintext, so patient names do not leak into the log.
 - **Record-level access (minimum necessary):** clinicians may only list, search,
   view, and edit patients they are assigned to (care-team model); admins have
   org-wide access and manage assignments; the creating clinician is auto-assigned.

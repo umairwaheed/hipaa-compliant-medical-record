@@ -1,17 +1,18 @@
 """Tamper-evident audit logging (HIPAA §164.312(b)).
 
-Every entry is chained to the previous one with SHA-256, so any later deletion
-or modification of a row breaks the chain and is detectable via
-``verify_chain``. Appends are serialized with a Postgres transaction-level
-advisory lock so concurrent requests cannot fork the chain.
+Every entry is chained to the previous one with a **keyed** MAC (HMAC-SHA256),
+so any later deletion or modification of a row breaks the chain and is
+detectable via ``verify_chain``. Because the chain is keyed (the key lives in the
+app config, not the DB), an attacker with only database write access cannot
+recompute the hashes to conceal tampering. Appends are serialized with a Postgres
+transaction-level advisory lock so concurrent requests cannot fork the chain.
 """
-import hashlib
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, security
 
 # Arbitrary constant identifying the audit-chain advisory lock.
 _AUDIT_LOCK_KEY = 743922100
@@ -23,6 +24,7 @@ class AuditAction:
     LOGIN_LOCKED = "LOGIN_LOCKED"
     MFA_SUCCESS = "MFA_SUCCESS"
     MFA_FAILURE = "MFA_FAILURE"
+    MFA_LOCKED = "MFA_LOCKED"
     MFA_ENROLLED = "MFA_ENROLLED"
     LOGOUT = "LOGOUT"
     PASSWORD_CHANGED = "PASSWORD_CHANGED"
@@ -67,7 +69,7 @@ def _compute_hash(
             prev_hash or "",
         ]
     )
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return security.audit_mac(payload)
 
 
 def record(

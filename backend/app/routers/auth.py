@@ -30,6 +30,25 @@ def _issue_full(db: Session, user: User) -> schemas.Token:
     )
 
 
+def _guard_mfa_lock(db: Session, user: User, request: Request) -> None:
+    """Reject the MFA step if the account is locked (shared counter with the
+    password step) — prevents brute-forcing the second factor."""
+    if crud.is_locked(user):
+        record(db, action=AuditAction.MFA_LOCKED, username=user.username,
+               user_id=user.id, ip_address=client_ip(request))
+        db.commit()
+        raise HTTPException(status.HTTP_423_LOCKED,
+                            "Account temporarily locked due to failed attempts. Try again later.")
+
+
+def _register_mfa_failure(db: Session, user: User, request: Request, detail: str | None = None) -> None:
+    """Count a failed TOTP attempt toward lockout, mirroring the password step."""
+    locked = crud.register_failed_login(db, user)
+    record(db, action=AuditAction.MFA_LOCKED if locked else AuditAction.MFA_FAILURE,
+           username=user.username, user_id=user.id, ip_address=client_ip(request), detail=detail)
+    db.commit()
+
+
 @router.post("/login", response_model=schemas.LoginResult)
 def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = crud.get_user_by_username(db, payload.username)
@@ -77,11 +96,11 @@ def mfa_verify(payload: schemas.MfaCode, request: Request,
     """Second factor for already-enrolled users."""
     if not user.mfa_enabled or not user.mfa_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "MFA is not enrolled for this account.")
+    _guard_mfa_lock(db, user, request)
     if not security.verify_totp(user.mfa_secret, payload.code):
-        record(db, action=AuditAction.MFA_FAILURE, username=user.username,
-               user_id=user.id, ip_address=client_ip(request))
-        db.commit()
+        _register_mfa_failure(db, user, request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid authentication code.")
+    crud.reset_login_failures(db, user)
     record(db, action=AuditAction.MFA_SUCCESS, username=user.username,
            user_id=user.id, ip_address=client_ip(request))
     db.commit()
@@ -107,11 +126,11 @@ def mfa_enroll_verify(payload: schemas.MfaCode, request: Request,
                       user: User = Depends(get_preauth_user), db: Session = Depends(get_db)):
     if user.mfa_enabled:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "MFA is already enrolled.")
+    _guard_mfa_lock(db, user, request)
     if not user.mfa_secret or not security.verify_totp(user.mfa_secret, payload.code):
-        record(db, action=AuditAction.MFA_FAILURE, username=user.username,
-               user_id=user.id, ip_address=client_ip(request), detail="enrollment")
-        db.commit()
+        _register_mfa_failure(db, user, request, detail="enrollment")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid authentication code.")
+    crud.reset_login_failures(db, user)
     user.mfa_enabled = True
     record(db, action=AuditAction.MFA_ENROLLED, username=user.username,
            user_id=user.id, ip_address=client_ip(request))

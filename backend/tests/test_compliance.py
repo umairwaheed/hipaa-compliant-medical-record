@@ -112,6 +112,34 @@ def test_audit_hash_stable_across_timezone_roundtrip():
     assert _compute_hash(timestamp=utc, **kw) == _compute_hash(timestamp=other, **kw)
 
 
+def test_audit_chain_is_keyed_not_plain_sha256():
+    """§164.312(b)/(c)(1): the chain MAC must be keyed, so DB-only access can't
+    recompute it. It must differ from an unkeyed SHA-256 of the same payload."""
+    import hashlib
+    payload = "2026-01-01T00:00:00+00:00|u|VIEW_PATIENT|1|mrn=X|127.0.0.1|"
+    mac = security.audit_mac(payload)
+    assert mac != hashlib.sha256(payload.encode()).hexdigest()
+    assert mac == security.audit_mac(payload)  # deterministic for verification
+
+
+def test_mfa_step_counts_toward_lockout():
+    """§164.312(d): failed MFA attempts must accrue toward account lockout, so the
+    second factor is not brute-forceable."""
+    from app import crud
+    from app.config import settings
+
+    class FakeUser:
+        failed_login_count = 0
+        locked_until = None
+
+    u = FakeUser()
+    for _ in range(settings.max_failed_logins - 1):
+        assert crud.register_failed_login(None, u) is False
+        assert not crud.is_locked(u)
+    assert crud.register_failed_login(None, u) is True   # threshold reached → lock
+    assert crud.is_locked(u)
+
+
 def test_full_and_preauth_tokens_have_distinct_scopes():
     full, _ = security.create_access_token("u", "admin", 0)
     pre, _ = security.create_preauth_token("u", "admin", 0)
