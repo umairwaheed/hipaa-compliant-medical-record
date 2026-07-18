@@ -7,8 +7,8 @@
 - A SQLAlchemy ``EncryptedString`` type that transparently encrypts PHI columns
   at rest with Fernet (AES-128-CBC + HMAC authentication).
 
-There is no dev fallback for the encryption key: ``settings.fernet_key`` is
-sourced from a required secret, so the module cannot be imported without one.
+The PHI key comes from ``keyprovider.load_phi_key()`` (env or Vault), which fails
+closed, so the module cannot be imported without a usable key.
 """
 import base64
 import hashlib
@@ -27,8 +27,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import String, TypeDecorator
 
 from .config import settings
+from .keyprovider import load_phi_key
 
-_fernet = Fernet(settings.fernet_key)
+_fernet = Fernet(load_phi_key())
 
 # JWT scopes
 SCOPE_FULL = "full"        # normal authenticated access to PHI
