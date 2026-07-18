@@ -15,6 +15,7 @@ from app.deps import get_current_user, require_admin
 from app.models import Patient
 from app.routers import audit as audit_router
 from app.routers import patients as patients_router
+from app.routers import users as users_router
 from app.security import EncryptedString
 
 # Auth dependencies that gate PHI access.
@@ -36,7 +37,9 @@ def _route_dependencies(route):
     return deps
 
 
-@pytest.mark.parametrize("router", [patients_router.router, audit_router.router])
+@pytest.mark.parametrize(
+    "router", [patients_router.router, audit_router.router, users_router.router]
+)
 def test_every_route_requires_authentication(router):
     """§164.312(a) Access Control — no PHI route is reachable unauthenticated."""
     for route in router.routes:

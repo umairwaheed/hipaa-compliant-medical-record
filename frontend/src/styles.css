@@ -128,6 +128,14 @@ textarea { resize: vertical; }
 .tag-bad { background: #fee2e2; color: #991b1b; }
 .tag-warn { background: #fef3c7; color: #92400e; }
 
+/* User admin */
+.actions-cell { white-space: nowrap; }
+.actions-cell .tiny { margin: 2px 3px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: grid; place-items: center; z-index: 50; }
+.modal { background: #fff; border-radius: var(--radius); padding: 22px; width: 380px; max-width: 92vw; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+.modal h3 { margin: 0 0 6px; }
+.modal input { margin: 12px 0; }
+
 /* Footer */
 .footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; border-top: 1px solid var(--line); }
 

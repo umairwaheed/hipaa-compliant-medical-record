@@ -44,6 +44,10 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
+    @property
+    def locked(self) -> bool:
+        return self.locked_until is not None and self.locked_until > _utcnow()
+
 
 class Patient(Base):
     __tablename__ = "patients"

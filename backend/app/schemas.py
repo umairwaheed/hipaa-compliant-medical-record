@@ -57,6 +57,31 @@ class UserOut(BaseModel):
     mfa_enabled: bool
 
 
+class UserAdminOut(BaseModel):
+    """Fuller projection for the admin user-management view."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    full_name: str
+    role: str
+    mfa_enabled: bool
+    is_active: bool
+    locked: bool
+    failed_login_count: int
+    created_at: datetime
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    full_name: str = Field(min_length=1, max_length=128)
+    role: str = Field(pattern=r"^(admin|clinician)$")
+    password: str = Field(min_length=12)
+
+
+class AdminPasswordReset(BaseModel):
+    new_password: str = Field(min_length=12)
+
+
 # --------------------------------------------------------------------------- #
 # Patients
 # --------------------------------------------------------------------------- #

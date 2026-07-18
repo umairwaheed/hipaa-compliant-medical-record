@@ -5,6 +5,7 @@ import PatientList from "./pages/PatientList.jsx";
 import PatientForm from "./pages/PatientForm.jsx";
 import PatientView from "./pages/PatientView.jsx";
 import AuditLog from "./pages/AuditLog.jsx";
+import UserAdmin from "./pages/UserAdmin.jsx";
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -26,6 +27,7 @@ function TopBar() {
       <nav>
         <Link to="/patients">Patients</Link>
         {user.role === "admin" && <Link to="/audit">Audit Log</Link>}
+        {user.role === "admin" && <Link to="/users">Users</Link>}
       </nav>
       <div className="user-box">
         <span className="whoami">
@@ -83,6 +85,14 @@ export default function App() {
             element={
               <ProtectedRoute adminOnly>
                 <AuditLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute adminOnly>
+                <UserAdmin />
               </ProtectedRoute>
             }
           />

@@ -20,6 +20,23 @@ def get_user_by_username(db: Session, username: str) -> models.User | None:
     return db.scalar(select(models.User).where(models.User.username == username))
 
 
+def get_user_by_id(db: Session, user_id: int) -> models.User | None:
+    return db.get(models.User, user_id)
+
+
+def list_all_users(db: Session) -> list[models.User]:
+    return list(db.scalars(select(models.User).order_by(models.User.id)))
+
+
+def create_user(db: Session, *, username: str, full_name: str, role: str, hashed_password: str) -> models.User:
+    user = models.User(
+        username=username, full_name=full_name, role=role, hashed_password=hashed_password
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
 def is_locked(user: models.User) -> bool:
     return user.locked_until is not None and user.locked_until > _utcnow()
 
