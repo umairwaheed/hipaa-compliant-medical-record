@@ -96,6 +96,19 @@ def test_audit_hash_detects_tampering():
     assert h != tampered
 
 
+def test_audit_hash_stable_across_timezone_roundtrip():
+    """Postgres returns timestamptz in the session tz; the hash must be identical
+    for the same instant regardless of its tzinfo representation."""
+    from app.audit import _compute_hash
+    from datetime import datetime, timezone, timedelta
+
+    utc = datetime(2026, 1, 1, 12, 0, 0, 123456, tzinfo=timezone.utc)
+    other = utc.astimezone(timezone(timedelta(hours=5)))  # same instant, +05:00
+    kw = dict(username="u", action="VIEW_PATIENT", patient_id=1,
+              detail="mrn=X", ip_address="127.0.0.1", prev_hash=None)
+    assert _compute_hash(timestamp=utc, **kw) == _compute_hash(timestamp=other, **kw)
+
+
 def test_full_and_preauth_tokens_have_distinct_scopes():
     full, _ = security.create_access_token("u", "admin", 0)
     pre, _ = security.create_preauth_token("u", "admin", 0)

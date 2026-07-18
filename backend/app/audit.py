@@ -44,9 +44,12 @@ def _compute_hash(
     ip_address: str | None,
     prev_hash: str | None,
 ) -> str:
+    # Canonicalize to UTC so the hash is stable across DB round-trips (Postgres
+    # returns timestamptz in the session timezone, which may not be UTC).
+    ts_iso = timestamp.astimezone(timezone.utc).isoformat()
     payload = "|".join(
         [
-            timestamp.isoformat(),
+            ts_iso,
             username,
             action,
             str(patient_id or ""),
