@@ -28,6 +28,13 @@ issues.
 - **PHI at rest:** SSN, contact info, insurance, clinical notes, and TOTP
   secrets encrypted with Fernet (AES-128-CBC + HMAC). Fail-closed on a
   wrong/rotated key.
+- **Key management (KMS / envelope encryption):** the Fernet DEK is stored only
+  as a Vault **transit** ciphertext (`WRAPPED_PHI_DEK`); the wrapping key (KEK)
+  lives in HashiCorp Vault on a **separate host** and never leaves it. At boot
+  the app AppRole-authenticates to Vault and unwraps the DEK into memory. **No
+  plaintext PHI key exists on the app host** — a stolen app-host disk/backup no
+  longer decrypts PHI. Vault runs with TLS, mlock, an audit device, and 8200
+  firewalled to the app host only. See `KEY-MANAGEMENT.md`.
 - **Audit:** append-only, SHA-256 hash-chained trail; tampering is detectable
   via `/api/audit/verify`. Searched terms are stored as a **keyed fingerprint**,
   never plaintext, so patient names do not leak into the audit log.
@@ -68,8 +75,16 @@ Findings from an earlier review, resolved in the production-hardening pass:
 - **Integrity coverage.** The hash chain protects the audit trail and Fernet
   authenticates encrypted columns, but plaintext identifier columns (name, MRN,
   DOB) are not individually integrity-signed beyond the audit record of changes.
-- **Key management.** The Fernet key is a static env/secret-file value. Production
-  target is a KMS with rotation + envelope encryption.
+- **Vault unseal / availability.** Vault uses Shamir (manual) unseal, so an
+  unattended reboot of the key host leaves PHI undecryptable until an operator
+  unseals it. Auto-unseal (cheap cloud KMS or a second Vault) is the documented
+  upgrade for unattended recovery. See `KEY-MANAGEMENT.md`.
+- **Vault protection level.** Vault OSS uses a software barrier, not a hardware
+  HSM; the AppRole `secret_id` on the app host is long-lived (scoped to
+  encrypt/decrypt only, revocable). A hardware-backed KEK would require Vault
+  Enterprise+HSM or a cloud KMS.
+- **JWT signing secret** (`SECRET_KEY`) is still a plaintext value in the app
+  host's `.env` (separate from PHI encryption); it could also move to Vault.
 - **Automatic logoff nuance.** "Automatic logoff" is now satisfied by the idle
   timeout; the 15-minute JWT is an absolute upper bound, not the primary control.
 

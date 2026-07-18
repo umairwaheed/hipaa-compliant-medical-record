@@ -139,7 +139,7 @@ Implemented in the code / deployment:
 
 Remaining — organizational or infrastructure, out of code scope:
 
-- 🟡 **KMS with automatic key rotation** + envelope encryption (currently a static env-injected key)
+- ✅ **Envelope encryption via KMS** — DEK wrapped by a Vault-held KEK on a separate host; no plaintext PHI key on the app host (`KEY-MANAGEMENT.md`). Remaining: automatic key rotation cadence + auto-unseal for unattended recovery
 - 🟡 Full-disk/volume encryption on the DB host; log shipping to external WORM storage + anomaly alerting
 - 🏢 CA-issued TLS certificate (bootstrap is self-signed until a domain is assigned)
 - 🏢 Signed **BAAs** with every vendor/host touching PHI; dedicated (not shared) host review
