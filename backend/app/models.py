@@ -7,7 +7,8 @@ PHI is split into two categories:
 - Highly sensitive fields (SSN, contact info, insurance, clinical notes) stored
   with ``EncryptedString`` so they are ciphertext at rest.
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,7 +18,7 @@ from .security import EncryptedString
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class User(Base):
@@ -92,7 +93,9 @@ class AuditLog(Base):
         DateTime(timezone=True), default=_utcnow, index=True
     )
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    username: Mapped[str] = mapped_column(String(64))  # denormalized: history survives user deletion
+    username: Mapped[str] = mapped_column(
+        String(64)
+    )  # denormalized: history survives user deletion
     action: Mapped[str] = mapped_column(String(48), index=True)
     patient_id: Mapped[int | None] = mapped_column(
         ForeignKey("patients.id"), nullable=True, index=True

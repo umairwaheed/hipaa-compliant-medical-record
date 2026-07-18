@@ -7,9 +7,10 @@ app config, not the DB), an attacker with only database write access cannot
 recompute the hashes to conceal tampering. Appends are serialized with a Postgres
 transaction-level advisory lock so concurrent requests cannot fork the chain.
 """
-from datetime import datetime, timezone
 
-from sqlalchemy import func, select, text
+from datetime import UTC, datetime
+
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from . import models, security
@@ -57,7 +58,7 @@ def _compute_hash(
 ) -> str:
     # Canonicalize to UTC so the hash is stable across DB round-trips (Postgres
     # returns timestamptz in the session timezone, which may not be UTC).
-    ts_iso = timestamp.astimezone(timezone.utc).isoformat()
+    ts_iso = timestamp.astimezone(UTC).isoformat()
     payload = "|".join(
         [
             ts_iso,
@@ -91,7 +92,7 @@ def record(
     prev_hash = db.scalar(
         select(models.AuditLog.row_hash).order_by(models.AuditLog.id.desc()).limit(1)
     )
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     row_hash = _compute_hash(
         timestamp=ts,
         username=username,

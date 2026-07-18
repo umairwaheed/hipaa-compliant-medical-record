@@ -1,5 +1,6 @@
 """Audit-log viewing endpoint. Restricted to administrators (minimum-necessary
 access to the compliance record itself)."""
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session

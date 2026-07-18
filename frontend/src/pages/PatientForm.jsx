@@ -81,11 +81,19 @@ export default function PatientForm({ mode }) {
         <div className="form-grid">
           <label>
             First name *
-            <input required value={form.first_name} onChange={(e) => update("first_name", e.target.value)} />
+            <input
+              required
+              value={form.first_name}
+              onChange={(e) => update("first_name", e.target.value)}
+            />
           </label>
           <label>
             Last name *
-            <input required value={form.last_name} onChange={(e) => update("last_name", e.target.value)} />
+            <input
+              required
+              value={form.last_name}
+              onChange={(e) => update("last_name", e.target.value)}
+            />
           </label>
           <label>
             Date of birth *
@@ -114,7 +122,11 @@ export default function PatientForm({ mode }) {
           </label>
           <label>
             Email
-            <input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} />
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => update("email", e.target.value)}
+            />
           </label>
           <label className="span-2">
             Address

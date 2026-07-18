@@ -1,5 +1,6 @@
 """FastAPI dependencies for authentication and role-based access control."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -89,7 +90,7 @@ def get_current_jti(
 ) -> tuple[str, datetime]:
     """Return (jti, expiry) of the presented token, for logout/revocation."""
     payload = _decode(credentials)
-    exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+    exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
     return payload["jti"], exp
 
 

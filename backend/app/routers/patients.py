@@ -6,6 +6,7 @@ Record-level access (minimum necessary): a clinician may only list, search,
 view, or edit patients they are assigned to. Administrators have
 organization-wide access and manage the assignments. Denied attempts are audited.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -177,8 +178,11 @@ def list_patient_assignments(
     _require_access(db, current, patient.id, request, patient.mrn)
     return [
         schemas.AssignmentOut(
-            user_id=u.id, username=u.username, full_name=u.full_name,
-            role=u.role, assigned_at=a.assigned_at,
+            user_id=u.id,
+            username=u.username,
+            full_name=u.full_name,
+            role=u.role,
+            assigned_at=a.assigned_at,
         )
         for a, u in crud.list_assignments(db, patient_id)
     ]
@@ -205,9 +209,13 @@ def assign_clinician(
     created = crud.assign_patient(db, patient_id, target.id, assigned_by=current.id)
     if created:
         record(
-            db, action=AuditAction.PATIENT_ASSIGNED, username=current.username,
-            user_id=current.id, patient_id=patient_id,
-            detail=f"assigned={target.username}", ip_address=client_ip(request),
+            db,
+            action=AuditAction.PATIENT_ASSIGNED,
+            username=current.username,
+            user_id=current.id,
+            patient_id=patient_id,
+            detail=f"assigned={target.username}",
+            ip_address=client_ip(request),
         )
     db.commit()
     return {"assigned": target.username, "created": created}
@@ -226,8 +234,12 @@ def unassign_clinician(
     removed = crud.unassign_patient(db, patient_id, user_id)
     if removed:
         record(
-            db, action=AuditAction.PATIENT_UNASSIGNED, username=current.username,
-            user_id=current.id, patient_id=patient_id,
-            detail=f"unassigned_user_id={user_id}", ip_address=client_ip(request),
+            db,
+            action=AuditAction.PATIENT_UNASSIGNED,
+            username=current.username,
+            user_id=current.id,
+            patient_id=patient_id,
+            detail=f"unassigned_user_id={user_id}",
+            ip_address=client_ip(request),
         )
     db.commit()

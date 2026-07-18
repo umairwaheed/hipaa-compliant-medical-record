@@ -1,4 +1,5 @@
 """Pydantic request/response schemas."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -20,6 +21,7 @@ class LoginResult(BaseModel):
     - ``mfa_required=True`` with ``enrolled=False`` → enroll via
       /auth/mfa/enroll then /auth/mfa/enroll/verify using ``preauth_token``.
     """
+
     mfa_required: bool = True
     enrolled: bool
     preauth_token: str
@@ -59,6 +61,7 @@ class UserOut(BaseModel):
 
 class UserAdminOut(BaseModel):
     """Fuller projection for the admin user-management view."""
+
     model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
@@ -117,6 +120,7 @@ class PatientUpdate(BaseModel):
 
 class PatientSummary(BaseModel):
     """Minimum-necessary projection for list/search views (no full PHI)."""
+
     model_config = ConfigDict(from_attributes=True)
     id: int
     mrn: str

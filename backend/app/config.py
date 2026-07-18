@@ -6,6 +6,7 @@ JWT secret, or database URL — a missing value is a hard error, not a silent
 fallback. Secrets are injected via the environment / a root-owned `.env` that is
 never committed.
 """
+
 from functools import lru_cache
 
 from pydantic import Field, field_validator, model_validator
@@ -30,9 +31,9 @@ class Settings(BaseSettings):
     vault_addr: str | None = None
     vault_role_id: str | None = None
     vault_secret_id: str | None = None
-    vault_cacert: str | None = None          # path to Vault's CA/cert for TLS verify
+    vault_cacert: str | None = None  # path to Vault's CA/cert for TLS verify
     vault_transit_key: str = "hipaa-phi"
-    wrapped_phi_dek: str | None = None       # transit ciphertext of the DEK
+    wrapped_phi_dek: str | None = None  # transit ciphertext of the DEK
 
     # --- Environment ---
     environment: str = "production"  # production | staging
@@ -40,8 +41,8 @@ class Settings(BaseSettings):
 
     # --- Auth / session policy ---
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15          # automatic logoff
-    preauth_token_expire_minutes: int = 5          # MFA challenge window
+    access_token_expire_minutes: int = 15  # automatic logoff
+    preauth_token_expire_minutes: int = 5  # MFA challenge window
     mfa_issuer: str = "HIPAA Medical Records"
 
     # --- Account lockout ---
@@ -57,7 +58,10 @@ class Settings(BaseSettings):
         if v is None:
             return v
         lowered = v.lower()
-        if any(bad in lowered for bad in ("changeme", "change-me", "insecure", "dev-only", "placeholder")):
+        if any(
+            bad in lowered
+            for bad in ("changeme", "change-me", "insecure", "dev-only", "placeholder")
+        ):
             raise ValueError("Refusing to boot with a placeholder secret. Provide a real value.")
         return v
 
@@ -65,15 +69,19 @@ class Settings(BaseSettings):
     def _validate_key_provider(self):
         if self.key_provider == "env":
             if not self.phi_encryption_key or len(self.phi_encryption_key) < 32:
-                raise ValueError("PHI_ENCRYPTION_KEY is required (>=32 chars) when KEY_PROVIDER=env.")
+                raise ValueError(
+                    "PHI_ENCRYPTION_KEY is required (>=32 chars) when KEY_PROVIDER=env."
+                )
         elif self.key_provider == "vault":
             missing = [
-                name for name, val in [
+                name
+                for name, val in [
                     ("VAULT_ADDR", self.vault_addr),
                     ("VAULT_ROLE_ID", self.vault_role_id),
                     ("VAULT_SECRET_ID", self.vault_secret_id),
                     ("WRAPPED_PHI_DEK", self.wrapped_phi_dek),
-                ] if not val
+                ]
+                if not val
             ]
             if missing:
                 raise ValueError(f"KEY_PROVIDER=vault requires: {', '.join(missing)}")

@@ -1,5 +1,6 @@
 """Test fixtures. Sets fail-closed-satisfying secrets in the environment BEFORE
 the app is imported so modules load offline (create_engine does not connect)."""
+
 import os
 
 from cryptography.fernet import Fernet

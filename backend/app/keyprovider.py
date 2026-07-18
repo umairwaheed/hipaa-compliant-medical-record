@@ -10,6 +10,7 @@ Two providers:
 Fails closed: any error unwrapping the key raises, so the app will not start
 serving PHI with a bad or missing key.
 """
+
 import base64
 import json
 import ssl
@@ -29,8 +30,11 @@ def _vault_post(path: str, body: dict, token: str | None = None) -> dict:
     req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("X-Vault-Token", token)
-    ctx = ssl.create_default_context(cafile=settings.vault_cacert) if settings.vault_cacert \
+    ctx = (
+        ssl.create_default_context(cafile=settings.vault_cacert)
+        if settings.vault_cacert
         else ssl.create_default_context()
+    )
     with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
         return json.loads(resp.read().decode())
 
@@ -62,4 +66,6 @@ def load_phi_key() -> bytes:
             return _load_from_vault()
         return settings.phi_encryption_key.encode()
     except Exception as e:  # fail closed
-        raise KeyProviderError(f"Could not load PHI encryption key ({settings.key_provider}): {e}") from e
+        raise KeyProviderError(
+            f"Could not load PHI encryption key ({settings.key_provider}): {e}"
+        ) from e

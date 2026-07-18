@@ -10,13 +10,14 @@
 The PHI key comes from ``keyprovider.load_phi_key()`` (env or Vault), which fails
 closed, so the module cannot be imported without a usable key.
 """
+
 import base64
 import hashlib
 import hmac
 import io
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
@@ -32,7 +33,7 @@ from .keyprovider import load_phi_key
 _fernet = Fernet(load_phi_key())
 
 # JWT scopes
-SCOPE_FULL = "full"        # normal authenticated access to PHI
+SCOPE_FULL = "full"  # normal authenticated access to PHI
 SCOPE_PREAUTH = "preauth"  # password verified, MFA step still pending
 
 
@@ -112,8 +113,10 @@ def blind_fingerprint(value: str) -> str:
 # --------------------------------------------------------------------------- #
 # JWT access tokens
 # --------------------------------------------------------------------------- #
-def _encode(subject: str, role: str, scope: str, token_version: int, minutes: int) -> tuple[str, str]:
-    now = datetime.now(timezone.utc)
+def _encode(
+    subject: str, role: str, scope: str, token_version: int, minutes: int
+) -> tuple[str, str]:
+    now = datetime.now(UTC)
     jti = uuid.uuid4().hex
     payload = {
         "sub": subject,
@@ -132,7 +135,9 @@ def create_access_token(subject: str, role: str, token_version: int) -> tuple[st
 
 
 def create_preauth_token(subject: str, role: str, token_version: int) -> tuple[str, str]:
-    return _encode(subject, role, SCOPE_PREAUTH, token_version, settings.preauth_token_expire_minutes)
+    return _encode(
+        subject, role, SCOPE_PREAUTH, token_version, settings.preauth_token_expire_minutes
+    )
 
 
 def decode_access_token(token: str) -> dict[str, Any]:

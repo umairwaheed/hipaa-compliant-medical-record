@@ -1,16 +1,17 @@
 """Alembic migration environment. Uses the application's settings for the
 database URL and the models' metadata for autogeneration."""
+
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.config import settings
-from app.database import Base
-from app.security import EncryptedString
+from alembic import context
 
 # Import models so their tables register on Base.metadata.
 from app import models  # noqa: F401
+from app.config import settings
+from app.database import Base
+from app.security import EncryptedString
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
@@ -26,7 +27,7 @@ def render_item(type_, obj, autogen_context):
     migration files don't import application code (encryption is applied at the
     ORM layer, not the schema layer)."""
     if type_ == "type" and isinstance(obj, EncryptedString):
-        return "sa.String(length=%d)" % obj.impl.length
+        return f"sa.String(length={obj.impl.length})"
     return False
 
 

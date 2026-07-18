@@ -1,4 +1,5 @@
 """SQLAlchemy engine, session factory, and declarative base (PostgreSQL)."""
+
 from collections.abc import Generator
 
 from sqlalchemy import create_engine

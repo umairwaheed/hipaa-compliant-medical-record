@@ -1,6 +1,7 @@
 """Data-access layer for users, patients, and token revocation."""
+
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -10,7 +11,7 @@ from .config import settings
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # --------------------------------------------------------------------------- #
@@ -28,7 +29,9 @@ def list_all_users(db: Session) -> list[models.User]:
     return list(db.scalars(select(models.User).order_by(models.User.id)))
 
 
-def create_user(db: Session, *, username: str, full_name: str, role: str, hashed_password: str) -> models.User:
+def create_user(
+    db: Session, *, username: str, full_name: str, role: str, hashed_password: str
+) -> models.User:
     user = models.User(
         username=username, full_name=full_name, role=role, hashed_password=hashed_password
     )
@@ -99,7 +102,9 @@ def list_patients(
 ) -> list[models.Patient]:
     stmt = select(models.Patient)
     stmt = _scope_to_user(stmt, only_for_user_id)
-    stmt = stmt.order_by(models.Patient.last_name, models.Patient.first_name).offset(skip).limit(limit)
+    stmt = (
+        stmt.order_by(models.Patient.last_name, models.Patient.first_name).offset(skip).limit(limit)
+    )
     return list(db.scalars(stmt))
 
 
@@ -127,12 +132,15 @@ def search_patients(
 # Care-relationship assignments (minimum necessary)
 # --------------------------------------------------------------------------- #
 def is_assigned(db: Session, patient_id: int, user_id: int) -> bool:
-    return db.scalar(
-        select(models.PatientAssignment.id).where(
-            models.PatientAssignment.patient_id == patient_id,
-            models.PatientAssignment.user_id == user_id,
+    return (
+        db.scalar(
+            select(models.PatientAssignment.id).where(
+                models.PatientAssignment.patient_id == patient_id,
+                models.PatientAssignment.user_id == user_id,
+            )
         )
-    ) is not None
+        is not None
+    )
 
 
 def can_access_patient(db: Session, user: models.User, patient_id: int) -> bool:
@@ -144,7 +152,9 @@ def assign_patient(db: Session, patient_id: int, user_id: int, assigned_by: int 
     """Idempotent. Returns True if a new assignment was created."""
     if is_assigned(db, patient_id, user_id):
         return False
-    db.add(models.PatientAssignment(patient_id=patient_id, user_id=user_id, assigned_by=assigned_by))
+    db.add(
+        models.PatientAssignment(patient_id=patient_id, user_id=user_id, assigned_by=assigned_by)
+    )
     db.flush()
     return True
 
@@ -163,7 +173,9 @@ def unassign_patient(db: Session, patient_id: int, user_id: int) -> bool:
     return True
 
 
-def list_assignments(db: Session, patient_id: int) -> list[tuple[models.PatientAssignment, models.User]]:
+def list_assignments(
+    db: Session, patient_id: int
+) -> list[tuple[models.PatientAssignment, models.User]]:
     stmt = (
         select(models.PatientAssignment, models.User)
         .join(models.User, models.User.id == models.PatientAssignment.user_id)

@@ -4,9 +4,11 @@ These fail the build if a future change weakens a HIPAA technical safeguard:
 auth on every PHI route, encryption on every sensitive PHI column, fail-closed
 config, password policy, tamper-evident audit, and MFA-gated tokens.
 """
+
+from datetime import UTC
+
 import pytest
 from cryptography.fernet import Fernet
-from fastapi import Depends
 from pydantic import ValidationError
 
 from app import security
@@ -23,8 +25,13 @@ _AUTH_DEPS = {get_current_user, require_admin}
 
 # Patient columns that must be encrypted at rest.
 _MUST_ENCRYPT = {
-    "ssn", "phone", "email", "address",
-    "insurance_provider", "insurance_id", "clinical_notes",
+    "ssn",
+    "phone",
+    "email",
+    "address",
+    "insurance_provider",
+    "insurance_id",
+    "clinical_notes",
 }
 
 
@@ -88,27 +95,49 @@ def test_password_policy_accepts_strong():
 
 def test_audit_hash_detects_tampering():
     """A modified detail must not recompute to the stored hash."""
-    from app.audit import _compute_hash
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    h = _compute_hash(timestamp=ts, username="u", action="VIEW_PATIENT",
-                      patient_id=1, detail="mrn=X", ip_address="127.0.0.1", prev_hash=None)
-    tampered = _compute_hash(timestamp=ts, username="u", action="VIEW_PATIENT",
-                             patient_id=1, detail="mrn=Y", ip_address="127.0.0.1", prev_hash=None)
+    from app.audit import _compute_hash
+
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    h = _compute_hash(
+        timestamp=ts,
+        username="u",
+        action="VIEW_PATIENT",
+        patient_id=1,
+        detail="mrn=X",
+        ip_address="127.0.0.1",
+        prev_hash=None,
+    )
+    tampered = _compute_hash(
+        timestamp=ts,
+        username="u",
+        action="VIEW_PATIENT",
+        patient_id=1,
+        detail="mrn=Y",
+        ip_address="127.0.0.1",
+        prev_hash=None,
+    )
     assert h != tampered
 
 
 def test_audit_hash_stable_across_timezone_roundtrip():
     """Postgres returns timestamptz in the session tz; the hash must be identical
     for the same instant regardless of its tzinfo representation."""
-    from app.audit import _compute_hash
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    utc = datetime(2026, 1, 1, 12, 0, 0, 123456, tzinfo=timezone.utc)
+    from app.audit import _compute_hash
+
+    utc = datetime(2026, 1, 1, 12, 0, 0, 123456, tzinfo=UTC)
     other = utc.astimezone(timezone(timedelta(hours=5)))  # same instant, +05:00
-    kw = dict(username="u", action="VIEW_PATIENT", patient_id=1,
-              detail="mrn=X", ip_address="127.0.0.1", prev_hash=None)
+    kw = dict(
+        username="u",
+        action="VIEW_PATIENT",
+        patient_id=1,
+        detail="mrn=X",
+        ip_address="127.0.0.1",
+        prev_hash=None,
+    )
     assert _compute_hash(timestamp=utc, **kw) == _compute_hash(timestamp=other, **kw)
 
 
@@ -116,6 +145,7 @@ def test_audit_chain_is_keyed_not_plain_sha256():
     """§164.312(b)/(c)(1): the chain MAC must be keyed, so DB-only access can't
     recompute it. It must differ from an unkeyed SHA-256 of the same payload."""
     import hashlib
+
     payload = "2026-01-01T00:00:00+00:00|u|VIEW_PATIENT|1|mrn=X|127.0.0.1|"
     mac = security.audit_mac(payload)
     assert mac != hashlib.sha256(payload.encode()).hexdigest()
@@ -136,7 +166,7 @@ def test_mfa_step_counts_toward_lockout():
     for _ in range(settings.max_failed_logins - 1):
         assert crud.register_failed_login(None, u) is False
         assert not crud.is_locked(u)
-    assert crud.register_failed_login(None, u) is True   # threshold reached → lock
+    assert crud.register_failed_login(None, u) is True  # threshold reached → lock
     assert crud.is_locked(u)
 
 
@@ -171,6 +201,7 @@ def test_admin_bypasses_assignment_but_clinician_gated():
     assert crud.can_access_patient(None, FakeAdmin(), 999) is True
     # Clinician scope maps to their own id (used to filter list/search).
     from app.routers.patients import _scope
+
     assert _scope(FakeAdmin()) is None
     assert _scope(FakeClinician()) == 2
 

@@ -3,6 +3,7 @@
 Schema is managed by Alembic migrations run at deploy time — the app does NOT
 create tables or seed data on startup (no demo seeding in production).
 """
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware

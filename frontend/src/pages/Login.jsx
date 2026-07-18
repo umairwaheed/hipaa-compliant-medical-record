@@ -63,19 +63,26 @@ export default function Login() {
           <span className="lock">🔒</span> Secure Sign In
         </h1>
         <p className="muted small">
-          Access to protected health information is restricted to authorized users and
-          requires multi-factor authentication. All activity is logged.
+          Access to protected health information is restricted to authorized users and requires
+          multi-factor authentication. All activity is logged.
         </p>
 
         {expired && <div className="banner warn">Your session expired. Please sign in again.</div>}
-        {idle && <div className="banner warn">Signed out due to inactivity. Please sign in again.</div>}
+        {idle && (
+          <div className="banner warn">Signed out due to inactivity. Please sign in again.</div>
+        )}
         {error && <div className="banner error">{error}</div>}
 
         {stage === "password" && (
           <form onSubmit={submitPassword}>
             <label>
               Username
-              <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoFocus
+                autoComplete="username"
+              />
             </label>
             <label>
               Password

@@ -19,20 +19,44 @@ backend, **React (Vite)** frontend.
 
 ## HIPAA technical safeguards
 
-| Safeguard (45 CFR §164.312) | Implementation |
-|---|---|
-| **Access Control** §164.312(a)(1) | Per-user accounts; every API route requires a valid full-session JWT; RBAC gates the audit log. `app/deps.py` |
-| **Automatic Logoff** §164.312(a)(2)(iii) | Short-lived JWTs (15 min); SPA clears session and redirects on 401. Server-side revocation (logout + token-version bump). `app/security.py`, `app/deps.py` |
-| **Encryption at rest** §164.312(a)(2)(iv) | `EncryptedString` encrypts SSN, contact, insurance, notes, and TOTP secrets with Fernet before they reach Postgres. `app/security.py` |
-| **Audit Controls** §164.312(b) | Append-only, **hash-chained** `AuditLog` — every login, MFA event, search, view, create, and update. Chain verifiable via `/api/audit/verify` or the CLI. `app/audit.py` |
-| **Integrity** §164.312(c)(1) | Updates record which fields changed; Fernet HMAC + the audit hash chain detect tampering. |
-| **Person/Entity Authentication** §164.312(d) | bcrypt passwords + password policy; **mandatory TOTP MFA**; account lockout on repeated failures. `app/routers/auth.py` |
-| **Transmission Security** §164.312(e) | nginx TLS + HSTS at the edge; app sets `no-store`, `nosniff`, strict CSP, `X-Frame-Options: DENY`. `deploy/nginx-hipaa.conf`, `app/main.py` |
-| **Minimum Necessary** (Privacy Rule) | List/search return a reduced projection (no SSN/notes); full PHI only on an audited single-record view. |
+The Security Rule defines **five technical-safeguard standards** (45 CFR
+§164.312), each with required (R) and addressable (A) implementation
+specifications. All five standards are implemented here; the table below maps
+each to its code. `(R)`/`(A)` mark the spec type. See
+[`COMPLIANCE.md`](COMPLIANCE.md) for the full control-by-control matrix and
+[`SECURITY.md`](SECURITY.md) for the security posture.
 
-Additional hardening: fail-closed secrets (app refuses to boot without a real
-encryption key / JWT secret / Postgres URL), login rate-limiting at nginx, no
-default credentials, no interactive API docs in production.
+### 1. Access Control — §164.312(a)(1)
+| Spec | Implementation |
+|---|---|
+| Unique user identification `(a)(2)(i)` **(R)** | Per-user accounts; JWT identifies the actor on every request; role-based access. `app/deps.py`, `app/models.py` |
+| Emergency access procedure `(a)(2)(ii)` **(R)** | Administrators have organization-wide access (documented as the current break-glass path). `COMPLIANCE.md` |
+| Automatic logoff `(a)(2)(iii)` **(A)** | 10-min idle timeout + 15-min absolute JWT + server-side revocation. `frontend/src/auth.jsx`, `app/security.py` |
+| Encryption & decryption `(a)(2)(iv)` **(A)** | `EncryptedString` (Fernet) encrypts SSN, contact, insurance, notes, TOTP secrets; key from a KMS (Vault) envelope. `app/security.py`, `app/keyprovider.py` |
+| Record-level access (minimum necessary) | Clinicians see only assigned patients; denied access is audited. `app/routers/patients.py` |
+
+### 2. Audit Controls — §164.312(b) **(R)**
+Append-only, **keyed (HMAC-SHA256) hash-chained** `AuditLog` records every login, MFA event, search, view, create, update, and access denial. Tampering breaks the chain and is caught by `/api/audit/verify`. `app/audit.py`
+
+### 3. Integrity — §164.312(c)(1) **(R)**
+| Spec | Implementation |
+|---|---|
+| Protect PHI from improper alteration `(c)(1)` | Updates record which fields changed; the keyed audit chain detects alteration/deletion of the log. `app/crud.py`, `app/audit.py` |
+| Authenticate ePHI `(c)(2)` **(A)** | Fernet is authenticated encryption — tampered ciphertext fails closed (`<decryption-error>`). `app/security.py` |
+
+### 4. Person or Entity Authentication — §164.312(d) **(R)**
+bcrypt password hashing + complexity policy; **mandatory TOTP MFA** (no PHI token without a verified second factor); account lockout across the password **and** MFA steps; nginx rate-limits credential endpoints. `app/routers/auth.py`, `app/security.py`
+
+### 5. Transmission Security — §164.312(e)(1)
+| Spec | Implementation |
+|---|---|
+| Integrity controls `(e)(2)(i)` **(A)** | nginx TLS 1.2/1.3 + HSTS; app bound to localhost behind the proxy. `deploy/nginx-hipaa.conf` |
+| Encryption `(e)(2)(ii)` **(A)** | TLS in transit; app sets `no-store`, `nosniff`, strict CSP, `X-Frame-Options: DENY`. `app/main.py` |
+
+**Additional hardening:** fail-closed secrets (no boot without a real encryption
+key / JWT secret / Postgres URL), no default credentials, no interactive API docs
+in production, and the *Minimum Necessary* projection on list/search (no SSN/notes
+until an audited single-record view).
 
 ## Architecture
 

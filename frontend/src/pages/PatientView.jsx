@@ -28,7 +28,11 @@ function CareTeam({ patientId, isAdmin }) {
   }
   useEffect(() => {
     load();
-    if (isAdmin) api.get("/users").then(({ data }) => setUsers(data)).catch(() => {});
+    if (isAdmin)
+      api
+        .get("/users")
+        .then(({ data }) => setUsers(data))
+        .catch(() => {});
   }, [patientId, isAdmin]);
 
   async function add() {
@@ -60,14 +64,21 @@ function CareTeam({ patientId, isAdmin }) {
       <div className="section-title">Care team · minimum-necessary access</div>
       {err && <div className="banner error">{err}</div>}
       {team.length === 0 ? (
-        <p className="muted small">No clinicians assigned. Only administrators can currently access this record.</p>
+        <p className="muted small">
+          No clinicians assigned. Only administrators can currently access this record.
+        </p>
       ) : (
         <ul className="care-team">
           {team.map((t) => (
             <li key={t.user_id}>
-              <span>{t.full_name} <code>{t.username}</code> <span className={`role role-${t.role}`}>{t.role}</span></span>
+              <span>
+                {t.full_name} <code>{t.username}</code>{" "}
+                <span className={`role role-${t.role}`}>{t.role}</span>
+              </span>
               {isAdmin && (
-                <button className="btn-ghost tiny" onClick={() => remove(t.user_id)}>Remove</button>
+                <button className="btn-ghost tiny" onClick={() => remove(t.user_id)}>
+                  Remove
+                </button>
               )}
             </li>
           ))}
@@ -75,13 +86,21 @@ function CareTeam({ patientId, isAdmin }) {
       )}
       {isAdmin && (
         <div className="row gap" style={{ marginTop: 8 }}>
-          <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ maxWidth: 320 }}>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            style={{ maxWidth: 320 }}
+          >
             <option value="">Assign a clinician…</option>
             {addable.map((u) => (
-              <option key={u.id} value={u.id}>{u.full_name} ({u.username}) — {u.role}</option>
+              <option key={u.id} value={u.id}>
+                {u.full_name} ({u.username}) — {u.role}
+              </option>
             ))}
           </select>
-          <button className="btn-secondary" onClick={add} disabled={!selected}>Assign</button>
+          <button className="btn-secondary" onClick={add} disabled={!selected}>
+            Assign
+          </button>
         </div>
       )}
     </>

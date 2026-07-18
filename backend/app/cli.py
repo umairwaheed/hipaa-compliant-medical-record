@@ -8,6 +8,7 @@ Usage:
     python -m app.cli verify-audit
     python -m app.cli list-users
 """
+
 import argparse
 import getpass
 import os
@@ -82,8 +83,10 @@ def verify_audit(_args) -> None:
         if result["intact"]:
             print(f"Audit chain INTACT ({result['count']} rows).")
         else:
-            sys.exit(f"Audit chain BROKEN at row id {result['broken_at_id']} "
-                     f"({result['count']} rows).")
+            sys.exit(
+                f"Audit chain BROKEN at row id {result['broken_at_id']} "
+                f"({result['count']} rows)."
+            )
     finally:
         db.close()
 
@@ -92,8 +95,10 @@ def list_users(_args) -> None:
     db = SessionLocal()
     try:
         for u in db.query(User).order_by(User.id).all():
-            print(f"{u.id:>3}  {u.username:<20} {u.role:<10} "
-                  f"mfa={'on' if u.mfa_enabled else 'off'} active={u.is_active}")
+            print(
+                f"{u.id:>3}  {u.username:<20} {u.role:<10} "
+                f"mfa={'on' if u.mfa_enabled else 'off'} active={u.is_active}"
+            )
     finally:
         db.close()
 

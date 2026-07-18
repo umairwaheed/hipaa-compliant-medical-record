@@ -7,6 +7,7 @@ Login is a two-step flow enforcing mandatory MFA:
       POST /auth/mfa/enroll/verify  TOTP code → enables MFA + full token
 No full (PHI-capable) token is ever issued without a verified second factor.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -34,18 +35,33 @@ def _guard_mfa_lock(db: Session, user: User, request: Request) -> None:
     """Reject the MFA step if the account is locked (shared counter with the
     password step) — prevents brute-forcing the second factor."""
     if crud.is_locked(user):
-        record(db, action=AuditAction.MFA_LOCKED, username=user.username,
-               user_id=user.id, ip_address=client_ip(request))
+        record(
+            db,
+            action=AuditAction.MFA_LOCKED,
+            username=user.username,
+            user_id=user.id,
+            ip_address=client_ip(request),
+        )
         db.commit()
-        raise HTTPException(status.HTTP_423_LOCKED,
-                            "Account temporarily locked due to failed attempts. Try again later.")
+        raise HTTPException(
+            status.HTTP_423_LOCKED,
+            "Account temporarily locked due to failed attempts. Try again later.",
+        )
 
 
-def _register_mfa_failure(db: Session, user: User, request: Request, detail: str | None = None) -> None:
+def _register_mfa_failure(
+    db: Session, user: User, request: Request, detail: str | None = None
+) -> None:
     """Count a failed TOTP attempt toward lockout, mirroring the password step."""
     locked = crud.register_failed_login(db, user)
-    record(db, action=AuditAction.MFA_LOCKED if locked else AuditAction.MFA_FAILURE,
-           username=user.username, user_id=user.id, ip_address=client_ip(request), detail=detail)
+    record(
+        db,
+        action=AuditAction.MFA_LOCKED if locked else AuditAction.MFA_FAILURE,
+        username=user.username,
+        user_id=user.id,
+        ip_address=client_ip(request),
+        detail=detail,
+    )
     db.commit()
 
 
@@ -59,25 +75,42 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
         # Run a dummy bcrypt so this path costs the same as a wrong password —
         # otherwise response timing reveals whether the username exists.
         security.dummy_verify(payload.password)
-        record(db, action=AuditAction.LOGIN_FAILURE, username=payload.username,
-               ip_address=ip, detail="unknown user")
+        record(
+            db,
+            action=AuditAction.LOGIN_FAILURE,
+            username=payload.username,
+            ip_address=ip,
+            detail="unknown user",
+        )
         db.commit()
         raise invalid
 
     if crud.is_locked(user):
-        record(db, action=AuditAction.LOGIN_LOCKED, username=user.username,
-               user_id=user.id, ip_address=ip)
+        record(
+            db,
+            action=AuditAction.LOGIN_LOCKED,
+            username=user.username,
+            user_id=user.id,
+            ip_address=ip,
+        )
         db.commit()
-        raise HTTPException(status.HTTP_423_LOCKED,
-                            "Account temporarily locked due to failed attempts. Try again later.")
+        raise HTTPException(
+            status.HTTP_423_LOCKED,
+            "Account temporarily locked due to failed attempts. Try again later.",
+        )
 
     # Always run bcrypt (even for inactive users) so timing does not distinguish.
     password_ok = security.verify_password(payload.password, user.hashed_password)
     if not user.is_active or not password_ok:
         locked = crud.register_failed_login(db, user)
-        record(db, action=AuditAction.LOGIN_LOCKED if locked else AuditAction.LOGIN_FAILURE,
-               username=user.username, user_id=user.id, ip_address=ip,
-               detail="invalid credentials")
+        record(
+            db,
+            action=AuditAction.LOGIN_LOCKED if locked else AuditAction.LOGIN_FAILURE,
+            username=user.username,
+            user_id=user.id,
+            ip_address=ip,
+            detail="invalid credentials",
+        )
         db.commit()
         raise invalid
 
@@ -86,16 +119,26 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
     # it between TOTP guesses (re-login → 0 → 4 wrong codes → re-login → ...),
     # so the MFA lockout would never fire. The counter is reset only after a
     # fully successful authentication (MFA verify/enroll-verify).
-    record(db, action=AuditAction.LOGIN_SUCCESS, username=user.username,
-           user_id=user.id, ip_address=ip, detail="password ok; mfa pending")
+    record(
+        db,
+        action=AuditAction.LOGIN_SUCCESS,
+        username=user.username,
+        user_id=user.id,
+        ip_address=ip,
+        detail="password ok; mfa pending",
+    )
     db.commit()
     preauth, _ = security.create_preauth_token(user.username, user.role, user.token_version)
     return schemas.LoginResult(enrolled=user.mfa_enabled, preauth_token=preauth)
 
 
 @router.post("/mfa/verify", response_model=schemas.Token)
-def mfa_verify(payload: schemas.MfaCode, request: Request,
-               user: User = Depends(get_preauth_user), db: Session = Depends(get_db)):
+def mfa_verify(
+    payload: schemas.MfaCode,
+    request: Request,
+    user: User = Depends(get_preauth_user),
+    db: Session = Depends(get_db),
+):
     """Second factor for already-enrolled users."""
     if not user.mfa_enabled or not user.mfa_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "MFA is not enrolled for this account.")
@@ -104,8 +147,13 @@ def mfa_verify(payload: schemas.MfaCode, request: Request,
         _register_mfa_failure(db, user, request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid authentication code.")
     crud.reset_login_failures(db, user)
-    record(db, action=AuditAction.MFA_SUCCESS, username=user.username,
-           user_id=user.id, ip_address=client_ip(request))
+    record(
+        db,
+        action=AuditAction.MFA_SUCCESS,
+        username=user.username,
+        user_id=user.id,
+        ip_address=client_ip(request),
+    )
     db.commit()
     return _issue_full(db, user)
 
@@ -120,13 +168,18 @@ def mfa_enroll(user: User = Depends(get_preauth_user), db: Session = Depends(get
     user.mfa_secret = secret  # stored encrypted; mfa_enabled stays False until verify
     db.commit()
     uri = security.totp_provisioning_uri(secret, user.username)
-    return schemas.MfaEnrollStart(secret=secret, otpauth_uri=uri,
-                                  qr_data_uri=security.totp_qr_data_uri(uri))
+    return schemas.MfaEnrollStart(
+        secret=secret, otpauth_uri=uri, qr_data_uri=security.totp_qr_data_uri(uri)
+    )
 
 
 @router.post("/mfa/enroll/verify", response_model=schemas.Token)
-def mfa_enroll_verify(payload: schemas.MfaCode, request: Request,
-                      user: User = Depends(get_preauth_user), db: Session = Depends(get_db)):
+def mfa_enroll_verify(
+    payload: schemas.MfaCode,
+    request: Request,
+    user: User = Depends(get_preauth_user),
+    db: Session = Depends(get_db),
+):
     if user.mfa_enabled:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "MFA is already enrolled.")
     _guard_mfa_lock(db, user, request)
@@ -135,26 +188,44 @@ def mfa_enroll_verify(payload: schemas.MfaCode, request: Request,
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid authentication code.")
     crud.reset_login_failures(db, user)
     user.mfa_enabled = True
-    record(db, action=AuditAction.MFA_ENROLLED, username=user.username,
-           user_id=user.id, ip_address=client_ip(request))
+    record(
+        db,
+        action=AuditAction.MFA_ENROLLED,
+        username=user.username,
+        user_id=user.id,
+        ip_address=client_ip(request),
+    )
     db.commit()
     return _issue_full(db, user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, jti_exp=Depends(get_current_jti),
-           user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    jti_exp=Depends(get_current_jti),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Revoke the current session's token (single-session logout)."""
     jti, exp = jti_exp
     crud.revoke_token(db, jti, exp)
-    record(db, action=AuditAction.LOGOUT, username=user.username,
-           user_id=user.id, ip_address=client_ip(request))
+    record(
+        db,
+        action=AuditAction.LOGOUT,
+        username=user.username,
+        user_id=user.id,
+        ip_address=client_ip(request),
+    )
     db.commit()
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(payload: schemas.PasswordChange, request: Request,
-                    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def change_password(
+    payload: schemas.PasswordChange,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if not security.verify_password(payload.current_password, user.hashed_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password is incorrect.")
     try:
@@ -163,8 +234,13 @@ def change_password(payload: schemas.PasswordChange, request: Request,
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
     user.hashed_password = security.hash_password(payload.new_password)
     user.token_version += 1  # invalidate all existing sessions on password change
-    record(db, action=AuditAction.PASSWORD_CHANGED, username=user.username,
-           user_id=user.id, ip_address=client_ip(request))
+    record(
+        db,
+        action=AuditAction.PASSWORD_CHANGED,
+        username=user.username,
+        user_id=user.id,
+        ip_address=client_ip(request),
+    )
     db.commit()
 
 

@@ -80,7 +80,9 @@ export default function PatientList() {
           <tbody>
             {patients.map((p) => (
               <tr key={p.id} className="clickable" onClick={() => navigate(`/patients/${p.id}`)}>
-                <td><code>{p.mrn}</code></td>
+                <td>
+                  <code>{p.mrn}</code>
+                </td>
                 <td>{p.last_name}</td>
                 <td>{p.first_name}</td>
                 <td>{p.date_of_birth}</td>
