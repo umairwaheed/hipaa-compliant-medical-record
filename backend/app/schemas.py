@@ -7,6 +7,24 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 # --------------------------------------------------------------------------- #
 # Auth
 # --------------------------------------------------------------------------- #
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResult(BaseModel):
+    """Response to the password step.
+
+    - ``mfa_required=True`` with ``enrolled=True``  → submit a TOTP code to
+      /auth/mfa/verify using ``preauth_token``.
+    - ``mfa_required=True`` with ``enrolled=False`` → enroll via
+      /auth/mfa/enroll then /auth/mfa/enroll/verify using ``preauth_token``.
+    """
+    mfa_required: bool = True
+    enrolled: bool
+    preauth_token: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -15,9 +33,19 @@ class Token(BaseModel):
     expires_in_minutes: int
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+class MfaCode(BaseModel):
+    code: str = Field(min_length=6, max_length=10)
+
+
+class MfaEnrollStart(BaseModel):
+    secret: str
+    otpauth_uri: str
+    qr_data_uri: str
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12)
 
 
 class UserOut(BaseModel):
@@ -26,6 +54,7 @@ class UserOut(BaseModel):
     username: str
     full_name: str
     role: str
+    mfa_enabled: bool
 
 
 # --------------------------------------------------------------------------- #
@@ -102,3 +131,9 @@ class AuditLogOut(BaseModel):
     patient_id: int | None
     detail: str | None
     ip_address: str | None
+
+
+class AuditChainStatus(BaseModel):
+    intact: bool
+    broken_at_id: int | None
+    count: int

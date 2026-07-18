@@ -1,0 +1,11 @@
+# Install to /etc/systemd/system/hipaa-backup.timer, then:
+#   systemctl enable --now hipaa-backup.timer
+[Unit]
+Description=Daily encrypted HIPAA database backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

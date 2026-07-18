@@ -1,48 +1,67 @@
 """Application configuration.
 
-Secrets are read from the environment (12-factor). A `.env` file is loaded for
-local development only; production deployments should inject real secrets through
-the platform's secret manager, never a committed file.
+Fail-closed: the application refuses to start unless the security-critical
+secrets are supplied. There are NO insecure defaults for the encryption key,
+JWT secret, or database URL — a missing value is a hard error, not a silent
+fallback. Secrets are injected via the environment / a root-owned `.env` that is
+never committed.
 """
 from functools import lru_cache
 
-from cryptography.fernet import Fernet
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Auth
-    secret_key: str = "dev-only-insecure-secret-change-me"
+    # --- Required secrets (no defaults; boot fails if unset) ---
+    secret_key: str = Field(min_length=32)
+    phi_encryption_key: str = Field(min_length=32)
+    database_url: str
+
+    # --- Environment ---
+    environment: str = "production"  # production | staging
+    cors_origins: str  # required, comma-separated; no wildcard in production
+
+    # --- Auth / session policy ---
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15  # HIPAA automatic logoff
+    access_token_expire_minutes: int = 15          # automatic logoff
+    preauth_token_expire_minutes: int = 5          # MFA challenge window
+    mfa_issuer: str = "HIPAA Medical Records"
 
-    # PHI encryption at rest. If unset in dev we derive an ephemeral key so the
-    # app boots, but the DB then cannot be decrypted across restarts — a loud
-    # signal that a real key must be configured.
-    phi_encryption_key: str = ""
+    # --- Account lockout ---
+    max_failed_logins: int = 5
+    lockout_minutes: int = 15
 
-    # Infra
-    database_url: str = "sqlite:///./hipaa_demo.db"
-    cors_origins: str = "http://localhost:5173"
+    # --- Password policy ---
+    min_password_length: int = 12
 
-    # Seeded demo accounts (demo only — never seed default creds in production).
-    seed_admin_username: str = "admin"
-    seed_admin_password: str = "Admin123!"
-    seed_clinician_username: str = "dr.smith"
-    seed_clinician_password: str = "Clinician123!"
+    @field_validator("secret_key", "phi_encryption_key")
+    @classmethod
+    def _reject_placeholders(cls, v: str) -> str:
+        lowered = v.lower()
+        if any(bad in lowered for bad in ("changeme", "change-me", "insecure", "dev-only", "placeholder")):
+            raise ValueError("Refusing to boot with a placeholder secret. Provide a real value.")
+        return v
+
+    @field_validator("database_url")
+    @classmethod
+    def _require_postgres(cls, v: str) -> str:
+        if not v.startswith(("postgresql://", "postgresql+psycopg://")):
+            raise ValueError("DATABASE_URL must be a PostgreSQL URL (postgresql+psycopg://...).")
+        return v
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        if self.environment == "production" and "*" in origins:
+            raise ValueError("Wildcard CORS origin is not permitted in production.")
+        return origins
 
     @property
     def fernet_key(self) -> bytes:
-        if self.phi_encryption_key:
-            return self.phi_encryption_key.encode()
-        # Ephemeral fallback for first-run dev convenience only.
-        return Fernet.generate_key()
+        return self.phi_encryption_key.encode()
 
 
 @lru_cache

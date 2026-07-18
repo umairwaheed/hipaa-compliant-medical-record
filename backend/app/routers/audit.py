@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import audit as audit_mod
 from .. import models, schemas
 from ..audit import AuditAction, record
 from ..database import get_db
@@ -42,3 +43,9 @@ def list_audit_log(
     )
     db.commit()
     return logs
+
+
+@router.get("/verify", response_model=schemas.AuditChainStatus)
+def verify_audit_chain(db: Session = Depends(get_db), current: User = Depends(require_admin)):
+    """Recompute the hash chain and report whether the audit log is intact."""
+    return audit_mod.verify_chain(db)

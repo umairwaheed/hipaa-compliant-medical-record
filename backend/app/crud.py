@@ -1,17 +1,54 @@
-"""Data-access layer for users and patients."""
+"""Data-access layer for users, patients, and token revocation."""
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from . import models, schemas
+from .config import settings
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 # --------------------------------------------------------------------------- #
-# Users
+# Users / authentication state
 # --------------------------------------------------------------------------- #
 def get_user_by_username(db: Session, username: str) -> models.User | None:
     return db.scalar(select(models.User).where(models.User.username == username))
+
+
+def is_locked(user: models.User) -> bool:
+    return user.locked_until is not None and user.locked_until > _utcnow()
+
+
+def register_failed_login(db: Session, user: models.User) -> bool:
+    """Increment the failure counter; lock the account past the threshold.
+    Returns True if the account is now locked."""
+    user.failed_login_count += 1
+    if user.failed_login_count >= settings.max_failed_logins:
+        user.locked_until = _utcnow() + timedelta(minutes=settings.lockout_minutes)
+        user.failed_login_count = 0
+        return True
+    return False
+
+
+def reset_login_failures(db: Session, user: models.User) -> None:
+    user.failed_login_count = 0
+    user.locked_until = None
+
+
+# --------------------------------------------------------------------------- #
+# Token revocation
+# --------------------------------------------------------------------------- #
+def revoke_token(db: Session, jti: str, expires_at: datetime) -> None:
+    db.merge(models.TokenBlocklist(jti=jti, expires_at=expires_at))
+
+
+def is_token_revoked(db: Session, jti: str) -> bool:
+    return db.get(models.TokenBlocklist, jti) is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -72,7 +109,7 @@ def update_patient(
     db: Session, patient: models.Patient, data: schemas.PatientUpdate
 ) -> tuple[models.Patient, list[str]]:
     """Apply a partial update. Returns the patient and the list of changed field
-    names (used for the audit detail, without logging the PHI values themselves)."""
+    names (for the audit detail, without logging the PHI values themselves)."""
     changed: list[str] = []
     for field, value in data.model_dump(exclude_unset=True).items():
         if getattr(patient, field) != value:

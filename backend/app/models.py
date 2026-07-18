@@ -5,12 +5,12 @@ PHI is split into two categories:
   app can offer clinician search. These are still PHI and protected by the
   access-control + audit layers.
 - Highly sensitive fields (SSN, contact info, insurance, clinical notes) stored
-  with `EncryptedString` so they are ciphertext at rest.
+  with ``EncryptedString`` so they are ciphertext at rest.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
 from .security import EncryptedString
@@ -28,7 +28,20 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(128))
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), default="clinician")  # admin | clinician
-    is_active: Mapped[bool] = mapped_column(default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Multi-factor authentication (TOTP). Secret encrypted at rest.
+    mfa_secret: Mapped[str | None] = mapped_column(EncryptedString(255), nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Brute-force protection.
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Bumping this invalidates every previously issued token for the user
+    # (logout-everywhere / password change / forced revocation).
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
@@ -60,10 +73,12 @@ class Patient(Base):
 
 
 class AuditLog(Base):
-    """Immutable, append-only record of every access to or change of PHI.
+    """Immutable, append-only, hash-chained record of every access to or change
+    of PHI (HIPAA §164.312(b)).
 
-    HIPAA §164.312(b) Audit Controls. Rows are never updated or deleted by the
-    application.
+    Each row stores the SHA-256 hash of the previous row plus its own content,
+    forming a chain: altering or deleting any row breaks every subsequent hash,
+    making tampering detectable. Rows are never updated or deleted by the app.
     """
 
     __tablename__ = "audit_logs"
@@ -73,10 +88,25 @@ class AuditLog(Base):
         DateTime(timezone=True), default=_utcnow, index=True
     )
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    username: Mapped[str] = mapped_column(String(64))  # denormalized so history survives user deletion
+    username: Mapped[str] = mapped_column(String(64))  # denormalized: history survives user deletion
     action: Mapped[str] = mapped_column(String(48), index=True)
     patient_id: Mapped[int | None] = mapped_column(
         ForeignKey("patients.id"), nullable=True, index=True
     )
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Hash chain.
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    row_hash: Mapped[str] = mapped_column(String(64))
+
+
+class TokenBlocklist(Base):
+    """Revoked JWT identifiers (single-session logout). Rows past ``expires_at``
+    can be purged since the token would be expired anyway."""
+
+    __tablename__ = "token_blocklist"
+
+    jti: Mapped[str] = mapped_column(String(32), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

@@ -1,4 +1,4 @@
-"""SQLAlchemy engine, session factory, and declarative base."""
+"""SQLAlchemy engine, session factory, and declarative base (PostgreSQL)."""
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
@@ -6,10 +6,8 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
-# check_same_thread is a SQLite-specific flag needed for FastAPI's threaded workers.
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-
-engine = create_engine(settings.database_url, connect_args=connect_args)
+# pool_pre_ping avoids serving requests on a stale/severed DB connection.
+engine = create_engine(settings.database_url, pool_pre_ping=True, pool_size=10, max_overflow=20)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

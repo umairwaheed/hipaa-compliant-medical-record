@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import api, { getToken, setToken } from "./api.js";
+import api, { getToken, setToken, preauthConfig } from "./api.js";
 
 const AuthContext = createContext(null);
 
@@ -7,7 +7,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, if a token exists, validate it and load the current user.
   useEffect(() => {
     async function bootstrap() {
       if (!getToken()) {
@@ -26,20 +25,52 @@ export function AuthProvider({ children }) {
     bootstrap();
   }, []);
 
+  // Step 1: password. Returns { enrolled, preauth_token } — MFA still required.
   async function login(username, password) {
     const { data } = await api.post("/auth/login", { username, password });
-    setToken(data.access_token);
-    const me = await api.get("/auth/me");
-    setUser(me.data);
     return data;
   }
 
-  function logout() {
+  // Step 2a: verify TOTP for an enrolled user → full session.
+  async function mfaVerify(preauthToken, code) {
+    const { data } = await api.post("/auth/mfa/verify", { code }, preauthConfig(preauthToken));
+    await establishSession(data.access_token);
+  }
+
+  // Step 2b (enrollment): fetch secret + QR, then verify to activate MFA.
+  async function mfaEnrollStart(preauthToken) {
+    const { data } = await api.post("/auth/mfa/enroll", {}, preauthConfig(preauthToken));
+    return data; // { secret, otpauth_uri, qr_data_uri }
+  }
+  async function mfaEnrollVerify(preauthToken, code) {
+    const { data } = await api.post(
+      "/auth/mfa/enroll/verify",
+      { code },
+      preauthConfig(preauthToken)
+    );
+    await establishSession(data.access_token);
+  }
+
+  async function establishSession(accessToken) {
+    setToken(accessToken);
+    const me = await api.get("/auth/me");
+    setUser(me.data);
+  }
+
+  async function logout() {
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // best-effort server-side revocation; clear locally regardless
+    }
     setToken(null);
     setUser(null);
   }
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading]);
+  const value = useMemo(
+    () => ({ user, loading, login, mfaVerify, mfaEnrollStart, mfaEnrollVerify, logout }),
+    [user, loading]
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

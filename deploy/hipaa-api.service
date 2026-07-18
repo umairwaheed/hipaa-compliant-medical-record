@@ -1,0 +1,38 @@
+# systemd unit for the HIPAA API. Runs as the unprivileged `hipaa` user, bound
+# to localhost only (nginx terminates TLS and proxies to it).
+# Install to /etc/systemd/system/hipaa-api.service
+[Unit]
+Description=HIPAA Medical Record API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=hipaa
+Group=hipaa
+WorkingDirectory=/home/hipaa/hipaa-compliant-medical-record/backend
+EnvironmentFile=/home/hipaa/hipaa-compliant-medical-record/backend/.env
+ExecStart=/home/hipaa/hipaa-compliant-medical-record/backend/.venv/bin/gunicorn app.main:app \
+    --workers 3 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - --error-logfile - --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+
+# --- Sandbox hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/hipaa/hipaa-compliant-medical-record/backend
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

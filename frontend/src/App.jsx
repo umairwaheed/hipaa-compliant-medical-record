@@ -90,8 +90,7 @@ export default function App() {
         </Routes>
       </main>
       <footer className="footer">
-        Demo application · Contains synthetic PHI only · Illustrates HIPAA Security Rule
-        technical safeguards
+        Protected health information · Authorized access only · All activity is audited
       </footer>
     </div>
   );

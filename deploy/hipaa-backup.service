@@ -1,0 +1,10 @@
+# Install to /etc/systemd/system/hipaa-backup.service
+[Unit]
+Description=Encrypted HIPAA database backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=hipaa
+Group=hipaa
+ExecStart=/home/hipaa/hipaa-compliant-medical-record/deploy/backup.sh

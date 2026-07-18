@@ -1,126 +1,95 @@
-# HIPAA-Compliant Medical Record Manager
+# HIPAA Medical Record Manager
 
-A portfolio demo of an electronic health record (EHR) system that implements the
-**HIPAA Security Rule technical safeguards** (45 CFR §164.312). Built with
-**FastAPI + SQLAlchemy + SQLite** on the backend and **React (Vite)** on the front end.
+An electronic health record (EHR) system implementing the **HIPAA Security Rule
+technical safeguards** (45 CFR §164.312). **FastAPI + SQLAlchemy + PostgreSQL**
+backend, **React (Vite)** frontend.
 
-> ⚠️ **Demo project.** It contains only synthetic PHI and ships with default
-> demo credentials. It is a reference implementation of the *technical*
-> safeguards — a production deployment additionally requires administrative and
-> physical safeguards, Business Associate Agreements, risk assessments, and a
-> hardened infrastructure. See [Production hardening](#production-hardening).
+> **Scope of this repository.** It implements and verifies the *technical*
+> safeguards. Full HIPAA compliance for real PHI additionally requires the
+> administrative and physical safeguards, a documented risk assessment, Business
+> Associate Agreements, and BAA-covered infrastructure — the responsibility of
+> the operating organization. See [`COMPLIANCE.md`](COMPLIANCE.md).
 
 ## Features
 
 - Create, view, edit, and search patient records
-- Secure authentication with role-based access (admin / clinician)
-- Every access to PHI recorded in an immutable audit trail
-- Sensitive PHI encrypted at rest
+- Mandatory multi-factor authentication (TOTP) with role-based access
+- Every access to PHI recorded in a tamper-evident, hash-chained audit trail
+- Sensitive PHI encrypted at rest; fail-closed configuration
 
-## How each HIPAA technical safeguard is implemented
+## HIPAA technical safeguards
 
 | Safeguard (45 CFR §164.312) | Implementation |
 |---|---|
-| **Access Control** §164.312(a)(1) — unique user IDs, only authorized access | Per-user accounts; every API route requires a valid JWT; RBAC (`require_admin`) gates the audit log. `backend/app/deps.py` |
-| **Automatic Logoff** §164.312(a)(2)(iii) | Short-lived JWTs (default 15 min); the SPA clears the session and redirects on any `401`. `security.py`, `frontend/src/api.js` |
-| **Encryption at rest** §164.312(a)(2)(iv) | `EncryptedString` SQLAlchemy type encrypts SSN, contact info, insurance, and clinical notes with Fernet (AES-128-CBC + HMAC) before they touch SQLite. `security.py` |
-| **Audit Controls** §164.312(b) | Append-only `AuditLog` records every login, list, search, view, create, and update — with user, action, patient, timestamp, and IP. `audit.py`, `models.py` |
-| **Integrity** §164.312(c)(1) | Updates record exactly which fields changed; Fernet's HMAC detects tampering with encrypted data at rest. |
-| **Person/Entity Authentication** §164.312(d) | bcrypt-hashed passwords; failed logins are themselves audited. `routers/auth.py` |
-| **Transmission Security** §164.312(e)(1) | App sets `no-store`, `nosniff`, `X-Frame-Options: DENY`; TLS/HSTS terminates at the proxy in production. `main.py` |
-| **Minimum Necessary** (Privacy Rule) | List/search return a reduced `PatientSummary` (no SSN/notes); full PHI only on explicit single-record view (which is audited). |
+| **Access Control** §164.312(a)(1) | Per-user accounts; every API route requires a valid full-session JWT; RBAC gates the audit log. `app/deps.py` |
+| **Automatic Logoff** §164.312(a)(2)(iii) | Short-lived JWTs (15 min); SPA clears session and redirects on 401. Server-side revocation (logout + token-version bump). `app/security.py`, `app/deps.py` |
+| **Encryption at rest** §164.312(a)(2)(iv) | `EncryptedString` encrypts SSN, contact, insurance, notes, and TOTP secrets with Fernet before they reach Postgres. `app/security.py` |
+| **Audit Controls** §164.312(b) | Append-only, **hash-chained** `AuditLog` — every login, MFA event, search, view, create, and update. Chain verifiable via `/api/audit/verify` or the CLI. `app/audit.py` |
+| **Integrity** §164.312(c)(1) | Updates record which fields changed; Fernet HMAC + the audit hash chain detect tampering. |
+| **Person/Entity Authentication** §164.312(d) | bcrypt passwords + password policy; **mandatory TOTP MFA**; account lockout on repeated failures. `app/routers/auth.py` |
+| **Transmission Security** §164.312(e) | nginx TLS + HSTS at the edge; app sets `no-store`, `nosniff`, strict CSP, `X-Frame-Options: DENY`. `deploy/nginx-hipaa.conf`, `app/main.py` |
+| **Minimum Necessary** (Privacy Rule) | List/search return a reduced projection (no SSN/notes); full PHI only on an audited single-record view. |
+
+Additional hardening: fail-closed secrets (app refuses to boot without a real
+encryption key / JWT secret / Postgres URL), login rate-limiting at nginx, no
+default credentials, no interactive API docs in production.
 
 ## Architecture
 
 ```
 backend/                 FastAPI service
   app/
-    config.py            Settings & secrets (env-driven)
-    database.py          SQLAlchemy engine/session
-    security.py          Password hashing, JWT, PHI field encryption
-    models.py            User, Patient, AuditLog
-    schemas.py           Pydantic request/response models
-    crud.py              Data-access layer
-    audit.py             Audit-log writer
+    config.py            Fail-closed settings & secrets
+    database.py          SQLAlchemy engine/session (PostgreSQL)
+    security.py          Passwords, JWT+scopes, TOTP, PHI encryption
+    models.py            User, Patient, AuditLog, TokenBlocklist
+    schemas.py           Pydantic models
+    crud.py              Data-access layer (+ lockout, revocation)
+    audit.py             Hash-chained audit writer + chain verifier
     deps.py              Auth + RBAC dependencies
-    routers/             auth, patients, audit endpoints
-    seed.py              Tables + demo data
+    cli.py               create-admin / reset-password / verify-audit
+    routers/             auth (MFA flow), patients, audit
     main.py              App wiring, security headers, CORS
-frontend/                React (Vite) SPA
-  src/pages/             Login, PatientList, PatientView, PatientForm, AuditLog
+  alembic/               Database migrations
+  tests/                 Compliance test suite (CI-enforced)
+frontend/                React (Vite) SPA — MFA enrollment + login, records UI
+deploy/                  systemd units, nginx vhost, encrypted backup job
 ```
 
-## Running locally
+## Running
 
-### 1. Backend (http://localhost:8000)
+This is deployed as a systemd-managed service behind nginx. See
+[`DEPLOY.md`](DEPLOY.md) for full production setup. Quick local backend run
+against a Postgres instance:
 
 ```bash
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-
-# Optional but recommended: create a persistent encryption key + secret
-cp .env.example .env
-python -c "from cryptography.fernet import Fernet; print('PHI_ENCRYPTION_KEY=' + Fernet.generate_key().decode())" >> .env
-python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(48))" >> .env
-
-uvicorn app.main:app --reload
+cp .env.example .env      # set SECRET_KEY, PHI_ENCRYPTION_KEY, DATABASE_URL, CORS_ORIGINS
+alembic upgrade head
+python -m app.cli create-admin --username admin --full-name "Site Admin"
+gunicorn app.main:app -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000
 ```
 
-Tables are created and demo data seeded automatically on startup.
-Interactive API docs: http://localhost:8000/docs
-
-### 2. Frontend (http://localhost:5173)
+Frontend:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd frontend && npm ci && npm run build   # or `npm run dev` for local development
 ```
 
-The Vite dev server proxies `/api` to the backend.
+## Tests
 
-### Demo accounts
+The compliance suite asserts the safeguards can't silently regress — auth on
+every PHI route, encryption on every sensitive column, fail-closed config,
+password policy, MFA-scoped tokens, and tamper-evident audit:
 
-| Role | Username | Password |
-|---|---|---|
-| Administrator (can view the audit log) | `admin` | `Admin123!` |
-| Clinician | `dr.smith` | `Clinician123!` |
+```bash
+cd backend && pip install -r requirements-dev.txt && pytest tests/ -q
+```
 
-## Try it
-
-1. Sign in as `dr.smith` → browse, search, create, and edit patients.
-2. Open a patient → note the "this access has been recorded" banner.
-3. Sign in as `admin` → open **Audit Log** to see every access, including your own.
-4. Inspect `backend/hipaa_demo.db` with a SQLite viewer — the `ssn`,
-   `clinical_notes`, etc. columns are ciphertext, while the audit trail is intact.
-
-## Design notes & trade-offs
-
-- **Searchable vs. encrypted fields.** Name, MRN, and DOB are stored in plaintext
-  so clinicians can search; they remain protected by access control + audit.
-  Highly sensitive fields are encrypted and therefore *not* directly searchable.
-  A production system needing search over encrypted values would add a **blind
-  index** (a keyed HMAC of a normalized value) rather than store plaintext.
-- **Audit immutability.** The app only ever appends to `AuditLog`. In production
-  this is reinforced with append-only/WORM storage or log shipping to a separate
-  system the app cannot rewrite.
-- **Key management.** The Fernet key lives in an env var here; production uses a
-  KMS/secret manager with rotation and envelope encryption.
-
-## Production hardening
-
-Not implemented in this demo, required for real PHI:
-
-- TLS everywhere + HSTS; disable HTTP
-- Managed secrets/KMS with key rotation; envelope encryption
-- Account lockout, MFA, password policies, session revocation lists
-- Full-database encryption (e.g. Postgres + pgcrypto/at-rest disk encryption)
-- Log aggregation to tamper-evident storage; alerting on anomalous access
-- Automated backups with tested restore; data-retention & disposal policy
-- Signed Business Associate Agreements with every vendor touching PHI
-- Administrative & physical safeguards, workforce training, risk assessment
+Runs in CI on every push (`.github/workflows/ci.yml`).
 
 ## License
 
-Provided as a portfolio/demonstration sample.
+Proprietary — client engagement.

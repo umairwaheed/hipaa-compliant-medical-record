@@ -81,8 +81,8 @@ button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid t
 .login-card label { display: block; margin: 14px 0; font-weight: 600; font-size: 13px; }
 .login-card input { width: 100%; margin-top: 6px; }
 .login-card .btn-primary { width: 100%; margin-top: 8px; padding: 10px; }
-.demo-creds { margin-top: 20px; padding: 12px; background: #f8fafc; border: 1px dashed var(--line); border-radius: 8px; font-size: 12px; color: var(--muted); }
-.demo-creds strong { display: block; margin-bottom: 6px; color: var(--ink); }
+.qr-wrap { display: grid; place-items: center; padding: 14px; background: #fff; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; }
+.qr-wrap img { image-rendering: pixelated; }
 
 /* Inputs */
 input, textarea, select {
