@@ -81,8 +81,11 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
         db.commit()
         raise invalid
 
-    # Password correct — reset counters, issue a preauth (MFA-pending) token.
-    crud.reset_login_failures(db, user)
+    # Password correct — but do NOT reset the failure counter here. MFA shares
+    # this counter, and resetting now would let a password-holding attacker zero
+    # it between TOTP guesses (re-login → 0 → 4 wrong codes → re-login → ...),
+    # so the MFA lockout would never fire. The counter is reset only after a
+    # fully successful authentication (MFA verify/enroll-verify).
     record(db, action=AuditAction.LOGIN_SUCCESS, username=user.username,
            user_id=user.id, ip_address=ip, detail="password ok; mfa pending")
     db.commit()
