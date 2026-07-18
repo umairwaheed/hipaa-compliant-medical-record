@@ -162,3 +162,18 @@ class AuditChainStatus(BaseModel):
     intact: bool
     broken_at_id: int | None
     count: int
+
+
+# --------------------------------------------------------------------------- #
+# Care-team assignments
+# --------------------------------------------------------------------------- #
+class AssignmentOut(BaseModel):
+    user_id: int
+    username: str
+    full_name: str
+    role: str
+    assigned_at: datetime
+
+
+class AssignmentCreate(BaseModel):
+    user_id: int

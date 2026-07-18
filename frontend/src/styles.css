@@ -136,6 +136,10 @@ textarea { resize: vertical; }
 .modal h3 { margin: 0 0 6px; }
 .modal input { margin: 12px 0; }
 
+/* Care team */
+.care-team { list-style: none; padding: 0; margin: 6px 0; }
+.care-team li { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }
+
 /* Footer */
 .footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; border-top: 1px solid var(--line); }
 

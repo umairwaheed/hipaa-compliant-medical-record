@@ -12,6 +12,82 @@ function Field({ label, value }) {
   );
 }
 
+function CareTeam({ patientId, isAdmin }) {
+  const [team, setTeam] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [selected, setSelected] = useState("");
+  const [err, setErr] = useState("");
+
+  async function load() {
+    try {
+      const { data } = await api.get(`/patients/${patientId}/assignments`);
+      setTeam(data);
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Failed to load care team.");
+    }
+  }
+  useEffect(() => {
+    load();
+    if (isAdmin) api.get("/users").then(({ data }) => setUsers(data)).catch(() => {});
+  }, [patientId, isAdmin]);
+
+  async function add() {
+    if (!selected) return;
+    setErr("");
+    try {
+      await api.post(`/patients/${patientId}/assignments`, { user_id: Number(selected) });
+      setSelected("");
+      await load();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Failed to assign.");
+    }
+  }
+  async function remove(userId) {
+    setErr("");
+    try {
+      await api.delete(`/patients/${patientId}/assignments/${userId}`);
+      await load();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Failed to remove.");
+    }
+  }
+
+  const assignedIds = new Set(team.map((t) => t.user_id));
+  const addable = users.filter((u) => u.is_active && !assignedIds.has(u.id));
+
+  return (
+    <>
+      <div className="section-title">Care team · minimum-necessary access</div>
+      {err && <div className="banner error">{err}</div>}
+      {team.length === 0 ? (
+        <p className="muted small">No clinicians assigned. Only administrators can currently access this record.</p>
+      ) : (
+        <ul className="care-team">
+          {team.map((t) => (
+            <li key={t.user_id}>
+              <span>{t.full_name} <code>{t.username}</code> <span className={`role role-${t.role}`}>{t.role}</span></span>
+              {isAdmin && (
+                <button className="btn-ghost tiny" onClick={() => remove(t.user_id)}>Remove</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isAdmin && (
+        <div className="row gap" style={{ marginTop: 8 }}>
+          <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ maxWidth: 320 }}>
+            <option value="">Assign a clinician…</option>
+            {addable.map((u) => (
+              <option key={u.id} value={u.id}>{u.full_name} ({u.username}) — {u.role}</option>
+            ))}
+          </select>
+          <button className="btn-secondary" onClick={add} disabled={!selected}>Assign</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function PatientView() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -83,6 +159,8 @@ export default function PatientView() {
       <div className="notes-box">
         {patient.clinical_notes || <span className="muted">No notes recorded.</span>}
       </div>
+
+      <CareTeam patientId={patient.id} isAdmin={user?.role === "admin"} />
 
       <div className="meta-row muted small">
         Created {new Date(patient.created_at).toLocaleString()} · Updated{" "}

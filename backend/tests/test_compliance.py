@@ -128,6 +128,25 @@ def test_dummy_verify_runs_and_equalizes_path():
     assert security._DUMMY_HASH.startswith("$2")
 
 
+def test_admin_bypasses_assignment_but_clinician_gated():
+    """Access decision: admins are unrestricted; clinicians require an
+    assignment. The admin branch short-circuits before any DB call."""
+    from app import crud
+
+    class FakeAdmin:
+        role, id = "admin", 1
+
+    class FakeClinician:
+        role, id = "clinician", 2
+
+    # Admin: allowed without touching the DB (db=None proves the short-circuit).
+    assert crud.can_access_patient(None, FakeAdmin(), 999) is True
+    # Clinician scope maps to their own id (used to filter list/search).
+    from app.routers.patients import _scope
+    assert _scope(FakeAdmin()) is None
+    assert _scope(FakeClinician()) == 2
+
+
 def test_blind_fingerprint_hides_term_but_correlates():
     """Audit fingerprints of search terms must not contain the term, must be
     stable for equal (normalized) inputs, and differ for different inputs."""

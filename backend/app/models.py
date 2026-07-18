@@ -9,7 +9,7 @@ PHI is split into two categories:
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -103,6 +103,21 @@ class AuditLog(Base):
     # Hash chain.
     prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     row_hash: Mapped[str] = mapped_column(String(64))
+
+
+class PatientAssignment(Base):
+    """Care-relationship linking a clinician to a patient. Enforces HIPAA
+    'minimum necessary' — a clinician may only access patients they are assigned
+    to. Admins are not listed here; they have organization-wide access."""
+
+    __tablename__ = "patient_assignments"
+    __table_args__ = (UniqueConstraint("patient_id", "user_id", name="uq_patient_user"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    assigned_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class TokenBlocklist(Base):
