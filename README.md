@@ -90,6 +90,19 @@ cd backend && pip install -r requirements-dev.txt && pytest tests/ -q
 
 Runs in CI on every push (`.github/workflows/ci.yml`).
 
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [`COMPLIANCE.md`](COMPLIANCE.md) | Control-by-control HIPAA matrix (implemented / verified / gaps) |
+| [`SECURITY.md`](SECURITY.md) | Security posture: controls, resolved findings, open items |
+| [`KEY-MANAGEMENT.md`](KEY-MANAGEMENT.md) | Envelope encryption / Vault (KMS) design, unseal, rotation |
+| [`DEPLOY.md`](DEPLOY.md) | First-time deployment |
+| [`OPERATIONS.md`](OPERATIONS.md) | Infrastructure map + operational runbooks |
+
+Recovery material (Vault unseal keys, tokens, credentials) is kept in a
+**gitignored** `secrets/` directory — never committed.
+
 ## License
 
 Proprietary — client engagement.

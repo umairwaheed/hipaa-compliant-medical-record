@@ -8,9 +8,13 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
-# Secrets
+# Secrets — NEVER commit. Local recovery material (Vault unseal keys, tokens,
+# credentials) lives here and must stay untracked.
 .env
 backend/.env
+/secrets/
+*.local.md
+*.secret
 
 # Node
 frontend/node_modules/
