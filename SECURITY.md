@@ -31,6 +31,10 @@ issues.
 - **Audit:** append-only, SHA-256 hash-chained trail; tampering is detectable
   via `/api/audit/verify`. Searched terms are stored as a **keyed fingerprint**,
   never plaintext, so patient names do not leak into the audit log.
+- **Record-level access (minimum necessary):** clinicians may only list, search,
+  view, and edit patients they are assigned to (care-team model); admins have
+  org-wide access and manage assignments; the creating clinician is auto-assigned.
+  Denied access returns 403 and is recorded as an `ACCESS_DENIED` audit event.
 - **Config:** fails closed — the app refuses to boot without a real
   `SECRET_KEY`, `PHI_ENCRYPTION_KEY`, and a PostgreSQL `DATABASE_URL`; placeholder
   secrets are rejected.
@@ -61,9 +65,6 @@ Findings from an earlier review, resolved in the production-hardening pass:
 
 ## Open items
 
-- **Record-level access scoping.** Any authenticated clinician can view any
-  patient. There is no care-relationship / assignment model enforcing "minimum
-  necessary" at the row level. This is a data-model change, tracked separately.
 - **Integrity coverage.** The hash chain protects the audit trail and Fernet
   authenticates encrypted columns, but plaintext identifier columns (name, MRN,
   DOB) are not individually integrity-signed beyond the audit record of changes.
