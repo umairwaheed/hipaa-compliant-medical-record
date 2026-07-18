@@ -129,4 +129,4 @@ Recovery material (Vault unseal keys, tokens, credentials) is kept in a
 
 ## License
 
-Proprietary — client engagement.
+[MIT](LICENSE) © 2026 Umair Khan
